@@ -607,7 +607,7 @@ int main(int argc, char *argv[])
     snd_pcm_hw_params_alloca(&hwparams);
     snd_pcm_sw_params_alloca(&swparams);
 
-	/* definição dos parâmetros relativos à placa de som
+	/* definição dos parâmetros relativos à placa de som*/
     
     err = snd_output_stdio_attach(&output, stdout, 0);
     if (err < 0) {
