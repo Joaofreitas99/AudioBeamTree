@@ -26,8 +26,8 @@ ref = db.reference("/AudioBeamTree/Song/id/")
 print("Waiting for song...")
 
 while ref.get() == "empty":
-	"""do nothing"""
-	
+    """do nothing"""
+    
 songId = ref.get()
 
 print("Song id:")

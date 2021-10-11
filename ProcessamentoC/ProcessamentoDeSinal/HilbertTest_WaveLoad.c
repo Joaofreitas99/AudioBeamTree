@@ -11,11 +11,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
-#include <time.h>
 
 #define M_PI 3.14159265358979323846
 
-#define SIZE_OF_BUFFER 65536
+#define SIZE_OF_BUFFER 32768
 
 #define MAX_SINE 65536
 
@@ -464,8 +463,7 @@ void sendMsg(int sock, void* msg, uint32_t msgsize)
 
 int main(int argc, char **argv){
 	
-	printf("loading\n");
-    
+	printf("loading...\n");
 	//socket variables	
 
 	int PORT = 2300;
@@ -476,13 +474,10 @@ int main(int argc, char **argv){
 	struct sockaddr_in client;
 	int clilen = sizeof(client);
 	int songId = 0;
-	
-	
-/* criação dos sockets para receção do id da musica */	
-	
+
     ssock = createSocket(PORT);
     printf("Server listening on port %d\n", PORT);
-	/* deteção de informação recebida no socket */
+
  while (songId == 0)
     {
         csock = accept(ssock, (struct sockaddr *)&client, &clilen);
@@ -508,15 +503,9 @@ int main(int argc, char **argv){
         closeSocket(csock);
     }
 	
-	clock_t begin = clock();
-	
 	int wavDur = 0;
 	char* songName = "";	
 	printf("songId = %d\n", songId);
-	
-	/*----------------------------------------------*/
-	
-	/* aós deteção e receção do id, esse id é utilizado para afetação da variavel relativa ao nome da musica */
 	
 	switch (songId) {
 		case 1:
@@ -533,18 +522,13 @@ int main(int argc, char **argv){
 			printf("Song #3 will play soon.\n");
 			wavDur = 360;
 			songName = "odetothemets192.wav";
-			break;		
+			break;			
 		default:
 			printf("Song #3 will play soon!\n");
 			wavDur = 360;
 			songName = "odetothemets192.wav";
 			break;
 	}
-	
-	/*-----------------------------------------*/
-	
-	
-	/* variáveis relativas ao processamento*/
 	
 	int iCarrier = 0;
 	int iSSB = 0;
@@ -554,8 +538,7 @@ int main(int argc, char **argv){
 	
 	int norm = pow(2,(sizeof (short)*8)-1); // normalização do valor das amostras para +-1
 	
-	/*criação do ficheiro de som de 16-bit*/
-	
+	// Create a mono (1), 16-bit sound and set the duration
     Wave mySound = makeWave((int)fs,1,16);
     waveSetDuration( &mySound, wavDur);
 	WavePtr = 0; 
@@ -574,77 +557,66 @@ int main(int argc, char **argv){
 	double aux[SIZE_OF_BUFFER*2] = { 0 };
 	double complex auxHilb[SIZE_OF_BUFFER*2] = { 0 };
 	double anteriorPos[SIZE_OF_BUFFER] = { 0 };
-	double buffer[SIZE_OF_BUFFER] = { 0 };
 	
 	double window[SIZE_OF_BUFFER*2]= { 0 };
-	
-	
-	/* criação da janela a usar*/ 
 	
 	for(int i=0; i<windowSize; i++){
 		window[i] = 0.5 * (1 - cos(2*M_PI*i/(windowSize-1))); // Hanning Window
 	}
 	
-	/* algoritmo de processamento*/
 	while(waveIndex < WaveSize){
 		
 		if(buf_len != SIZE_OF_BUFFER){ // Write
 			
-			circularBuffer[writeIndex++] = (double complex) WavePtr[waveIndex++]/norm; /* leitura do ficheiro por blocos*/
-			buf_len++;
+			circularBuffer[writeIndex++] = (double complex) WavePtr[waveIndex++]/norm;
+			//printf("circularBuffer[%d] = %lf\n", waveIndex, (double) circularBuffer[writeIndex]);
 			
+			buf_len++;
 		} else { // Read
-		
 				for(int i=0; i<SIZE_OF_BUFFER; i++){
-						aux[i]=anterior[i]* window[i];	/* janelamento do bloco recebido*/
-						auxHilb[i]=aux[i];
+				    aux[i]=anterior[i]* window[i];
+				    auxHilb[i]=aux[i];
 				}
 				
-				for(int i=0; i<SIZE_OF_BUFFER; i++){	/* criação do buffer a enviar ao hilbert (dobro do tamanho) */
+				for(int i=0; i<SIZE_OF_BUFFER; i++){
 						anterior[i] = circularBuffer[i];
-						aux[i+SIZE_OF_BUFFER]= circularBuffer[i] * window[i+SIZE_OF_BUFFER]; 
+						aux[i+SIZE_OF_BUFFER]= circularBuffer[i] * window[i+SIZE_OF_BUFFER];
 						auxHilb[i+SIZE_OF_BUFFER]=aux[i+SIZE_OF_BUFFER];
 				}
 				
-				hilbert(auxHilb, SIZE_OF_BUFFER*2); /* hilbert */
-							
-				for(int i=0; i<SIZE_OF_BUFFER*2; i++){	/* SSB */
-					aux[i] = (aux[i]*cos(fc*2*M_PI/fs*(float)iSSB) + cimag(auxHilb[i])*sin(fc*2*M_PI/fs*(float)iSSB));
-					iSSB++;
-					if(iSSB == 7091832){
-						iSSB = 0;
-					}
+				hilbert(auxHilb, SIZE_OF_BUFFER*2);
+				
+				if(iSSB > 8060904){
+					iSSB = 0;
 				}
 				
-				for(int i=0; i<SIZE_OF_BUFFER; i++){ /* adição da portadora */
-					posPros[i]= cos(fc*2*M_PI/fs*(float)iCarrier)/3 + (aux[i]+anteriorPos[i])/3;
-					iCarrier++;
-					if(iCarrier == 7091832){
-						iCarrier = 0;
-					}
+				if(iCarrier > 8028144){
+					iCarrier = 0;
+				}
+				
+				for(int i=0; i<SIZE_OF_BUFFER*2; i++){
+				    aux[i] = (aux[i]*cos(fc*2*M_PI/fs*(float)iSSB) + cimag(auxHilb[i])*sin(fc*2*M_PI/fs*(float)iSSB));
+				    iSSB++;
+				}
+				 
+				for(int i=0; i<SIZE_OF_BUFFER; i++){
+				    posPros[i]= cos(fc*2*M_PI/fs*(float)iCarrier)/3 + (aux[i]+anteriorPos[i])/3;
+				    iCarrier++;	
+				}
+				
+				for(int i=0; i<SIZE_OF_BUFFER; i++){
+				    anteriorPos[i]=aux[i+SIZE_OF_BUFFER];
+				    waveAddSample( &mySound, &posPros[i] );
+				}
 					
-				}
-					
-				for(int i=0; i<SIZE_OF_BUFFER; i++){  /* envio do bloco para o novo ficheiro */
-					anteriorPos[i]=aux[i+SIZE_OF_BUFFER];
-					printf("posPros[%d] = %lf \n", i, posPros[i]);
-					waveAddSample( &mySound, &posPros[i] );
-				}
-				
-				
 				buf_len = 0;
 				writeIndex = 0;
 		}
 		
 	}
-	
-	waveToFile( &mySound, "fileOutput.wav");
-    waveDestroy( &mySound );  
-    
-	clock_t end = clock();
-	double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-	
-	printf("time spent = %lf seconds\n", time_spent);
-	
+
+	waveToFile( &mySound, "testeN1.wav");
+    waveDestroy( &mySound );    
+        
 	return(0);
 }
